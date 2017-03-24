@@ -55,6 +55,9 @@ class Connection(_Connection):
         self._matched_pattern = None
         self._last_response = None
         self._history = list()
+        self._enable_tracing = False
+        self._tracing_password = None
+        self._tracing_filename = None
 
         if play_context.verbosity > 3:
             logging.getLogger('paramiko').setLevel(logging.DEBUG)
@@ -72,6 +75,20 @@ class Connection(_Connection):
             self._terminal.on_deauthorize()
 
         self._play_context = play_context
+
+    def enable_tracing(self, password):
+        self._enable_tracing = True
+        self._tracing_password = password
+        self._tracing_filename = filename
+
+    def write_history(self):
+        if self._enable_tracing:
+            editor = VaultEditor(self._tracing_password)
+            history = ''
+            for delta, command in self._history:
+                history += '%s - %s\n' % (delta, command)
+            editor.write_data(editor.valut.encrypt(history), self._tracing_filename)
+            self.log('tracing file written to %s' % self._tracing_filename)
 
     def _connect(self):
         """Connections to the device and sets the terminal type"""
@@ -130,6 +147,8 @@ class Connection(_Connection):
         if self._shell:
             self._shell.close()
             self._shell = None
+
+        self.write_history()
 
         return (0, 'ok', '')
 
@@ -241,6 +260,7 @@ class Connection(_Connection):
             code is an integer and stdout and stderr are strings
         """
         try:
+
             obj = json.loads(cmd)
         except (ValueError, TypeError):
             obj = {'command': str(cmd).strip()}
@@ -261,9 +281,16 @@ class Connection(_Connection):
         try:
             if not signal.getsignal(signal.SIGALRM):
                 signal.signal(signal.SIGALRM, self.alarm_handler)
+
             signal.alarm(self._play_context.timeout)
+            start_time = datetime.datetime.now()
             out = self.send(obj)
+            end_time = datetime.datetime.now()
+            delta = end_time - start_time
+            self._history.append((str(delta), obj['command']))
             signal.alarm(0)
+
             return (0, out, '')
         except (AnsibleConnectionFailure, ValueError) as exc:
             return (1, '', str(exc))
+

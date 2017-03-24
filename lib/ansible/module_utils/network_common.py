@@ -67,17 +67,27 @@ class ComplexDict(object):
 
     """
 
-    def __init__(self, attrs, module):
-        self._attributes = attrs
+    def __init__(self, module, attrs=None, args=[], keys=None, from_argspec=False):
+        self._attributes = attrs or {}
         self._module = module
+
+        for arg in args:
+            self._attributes[arg] = dict()
+            if from_argspec:
+                self._attributes[arg]['read_from'] = arg
+            if arg in keys:
+                self._attributes[arg]['key'] = True
+
         self.attr_names = frozenset(self._attributes.keys())
 
         self._has_key = False
         for name, attr in iteritems(self._attributes):
             if attr.get('read_from'):
-                spec = self._module.argument_spec.get(attr['read_from'])
-                if not spec:
+                if attr['read_from'] not in self._module.argument_spec:
                     raise ValueError('argument_spec %s does not exist' %  attr['read_from'])
+                spec = self._module.argument_spec.get(attr['read_from'])
+                #if not spec:
+                #    raise ValueError('argument_spec %s does not exist' %  attr['read_from'])
                 for key, value in iteritems(spec):
                     if key not in attr:
                         attr[key] = value
@@ -88,6 +98,8 @@ class ComplexDict(object):
                 self_has_key = True
                 attr['required'] = True
 
+    def serialize(self):
+        return self._attributes
 
     def _dict(self, value):
         obj = {}
@@ -98,13 +110,14 @@ class ComplexDict(object):
                 obj[name] = attr.get('default')
         return obj
 
-    def __call__(self, value):
+    def __call__(self, value, strict=True):
         if not isinstance(value, dict):
             value = self._dict(value)
 
-        unknown = set(value).difference(self.attr_names)
-        if unknown:
-            raise ValueError('invalid keys: %s' % ','.join(unknown))
+        if strict:
+            unknown = set(value).difference(self.attr_names)
+            if unknown:
+                raise ValueError('invalid keys: %s' % ','.join(unknown))
 
         for name, attr in iteritems(self._attributes):
             if not value.get(name):
@@ -144,8 +157,8 @@ class ComplexDict(object):
 class ComplexList(ComplexDict):
     """Extends ```ComplexDict``` to handle a  list of dicts """
 
-    def __call__(self, values):
+    def __call__(self, values, strict=True):
         if not isinstance(values, (list, tuple)):
-            raise TypeError('value must be an ordered iterable')
-        return [(super(ComplexList, self).__call__(v)) for v in values]
+            raise TypeError('value must be an iterable')
+        return [(super(ComplexList, self).__call__(v, strict)) for v in values]
 
