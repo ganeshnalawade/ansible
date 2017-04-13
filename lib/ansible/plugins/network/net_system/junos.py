@@ -19,13 +19,9 @@
 from __future__ import (absolute_import, division, print_function)
 __metaclass__ = type
 
-import re
-
-from abc import ABCMeta, abstractmethod
 from xml.etree.ElementTree import Element, SubElement
 
-from ansible.plugins.netconf.junos import NetconfModule as _NetconfModule
-from ansible.module_utils.six import with_metaclass
+from ansible.plugins.network.junos import NetworkModule as _NetworkModule
 
 try:
     from __main__ import display
@@ -34,28 +30,33 @@ except ImportError:
     display = Display()
 
 
-class NetconfModule(_NetconfModule):
+class NetworkModule(_NetworkModule):
+
+    def set_hostname(self, element, value):
+        subele = SubElement(element, 'host-name')
+        subele.text = value
+
+    def set_domain_name(self, element, value):
+        subele = SubElement(element, 'domain-name')
+        subele.text = value
+
+    def set_name_servers(self, element, values):
+        for item in values:
+            subele = SubElement(element, 'name-server')
+            subele.text = item
+
+    def set_domain_search(self, element, values):
+        for item in values:
+            subele = SubElement(element, 'domain-search')
+            subele.text = item
 
     def _map_obj_to_element(self, obj):
+
         element = Element('system')
 
-        if obj['hostname']:
-            subele = SubElement(element, 'host-name')
-            subele.text = obj['hostname']
-
-        if obj['domain_name']:
-            subele = SubElement(element, 'domain-name')
-            subele.text = obj['domain_name']
-
-        if obj['name_servers']:
-            for item in obj['name_servers']:
-                subele = SubElement(element, 'name-server')
-                subele.text = obj['name_servers']
-
-        if obj['domain_search']:
-            for item in obj['domain_search']:
-                subele = SubElement(element, 'domain-search')
-                subele.text = obj['name_servers']
+        for _, key, value, _ in obj[0]:
+            if value is not None:
+                self.invoke('set_%s' % key, element, value)
 
         return element
 

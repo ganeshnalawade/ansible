@@ -55,7 +55,6 @@ class ActionModule(_ActionModule):
 
         namespace = 'ansible.plugins.network.%s' % self._task.action
         plugin_path = 'network_plugins'
-
         loader = PluginLoader('NetworkModule', namespace, plugin_path, plugin_path)
 
         try:

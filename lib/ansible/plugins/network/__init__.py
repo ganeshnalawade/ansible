@@ -30,7 +30,7 @@ from ansible.module_utils.six import with_metaclass, iteritems
 from ansible.module_utils.network_common import to_list
 from ansible.utils.path import unfrackpath
 
-DEFAULT_STATE_DELAY = os.getenv('ANSIBLE_NETWORK_DEFAULT_STATE_DELAY', 10)
+DEFAULT_STATE_DELAY = os.getenv('ANSIBLE_NETWORK_DEFAULT_STATE_DELAY', 30)
 
 
 class NetworkBase(with_metaclass(ABCMeta, object)):
@@ -48,7 +48,7 @@ class NetworkBase(with_metaclass(ABCMeta, object)):
         pass
 
     @abstractmethod
-    def load_to_device(self):
+    def load_to_device(self, data):
         pass
 
     @abstractmethod
@@ -56,23 +56,27 @@ class NetworkBase(with_metaclass(ABCMeta, object)):
         pass
 
     def run(self, data):
-        result = {}
 
-        self.create_connection()
+        self._connection = self.create_connection()
+
+        result = {'changed': False}
+        spec = data['spec']
 
         if 'config' in data:
-            spec = data['spec']
-
-            current = to_list(self.load_from_device())
-            key = next((k for k, v in iteritems(spec) if v.get('key')), None)
-
-            result = {'changed': False}
             updates = list()
 
-            for config in to_list(data['config']):
-                item = next((i for i in current if i.get(key) == config.get(key)), None)
-                item = self.json_diff((item or current[0]), config)
-                updates.append(item)
+            if self.transport != 'netconf':
+                current = to_list(self.load_from_device())
+                key = next((k for k, v in iteritems(spec) if v.get('key')), None)
+
+                for config in to_list(data['config']):
+                    item = next((i for i in current if i.get(key) == config.get(key)), None)
+                    item = self.json_diff((item or current[0]), config)
+                    updates.append(item)
+
+            else:
+                for config in to_list(data['config']):
+                    updates.append([([], k, v, None) for k, v in iteritems(config)])
 
             result.update(self.load_to_device(updates))
 

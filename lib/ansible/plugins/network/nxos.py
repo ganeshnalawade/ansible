@@ -42,6 +42,8 @@ except ImportError:
 
 class NetworkModule(NetworkBase):
 
+    transport = 'cli'
+
     def __init__(self, *args, **kwargs):
         super(NetworkModule, self).__init__(*args, **kwargs)
         self.cache = {}
@@ -60,7 +62,7 @@ class NetworkModule(NetworkBase):
         pc.remote_user = self._play_context.connection_user
         pc.become = True
 
-        self._connection = connection_loader.get('persistent', pc, sys.stdin)
+        connection = connection_loader.get('persistent', pc, sys.stdin)
 
         self.socket_path = self._get_socket_path(pc)
         display.vvvv('socket_path: %s' % self.socket_path, pc.remote_addr)
@@ -68,18 +70,20 @@ class NetworkModule(NetworkBase):
         if not os.path.exists(self.socket_path):
             # start the connection if it isn't started
             display.vvvv('calling open_shell()', pc.remote_addr)
-            rc, out, err = self._connection.exec_command('open_shell()')
+            rc, out, err = connection.exec_command('open_shell()')
             if not rc == 0:
-                raise AnsibleConnectionFailure('unable to open shell')
+                raise AnsibleError('unable to open shell')
         else:
             display.vvvv('reuse existing control connection', pc.remote_addr)
             # make sure we are in the right cli context which should be
             # enable mode and not config module
-            rc, out, err = self._connection.exec_command('prompt()')
+            rc, out, err = connection.exec_command('prompt()')
             while str(out).strip().endswith(')#'):
                 display.vvvv('wrong context, sending exit to device', self._play_context.remote_addr)
-                self._connection.exec_command('exit')
-                rc, out, err = self._connection.exec_command('prompt()')
+                connection.exec_command('exit')
+                rc, out, err = connection.exec_command('prompt()')
+
+        return connection
 
     def load_from_device(self):
         raise NotImplementedError
