@@ -19,7 +19,9 @@
 from __future__ import (absolute_import, division, print_function)
 __metaclass__ = type
 
+import os
 import re
+import time
 
 from abc import ABCMeta, abstractmethod
 
@@ -27,6 +29,8 @@ from ansible.plugins import connection_loader
 from ansible.module_utils.six import with_metaclass, iteritems
 from ansible.module_utils.network_common import to_list
 from ansible.utils.path import unfrackpath
+
+DEFAULT_STATE_DELAY = os.getenv('ANSIBLE_NETWORK_DEFAULT_STATE_DELAY', 10)
 
 
 class NetworkBase(with_metaclass(ABCMeta, object)):
@@ -72,9 +76,11 @@ class NetworkBase(with_metaclass(ABCMeta, object)):
 
             result.update(self.load_to_device(updates))
 
-        if 'state' in data:
+        disable_state_checks = os.getenv('ANSIBLE_NETWORK_DISABLE_STATE_CHECKS', False)
+
+        if not disable_state_checks and 'state' in data:
             if result.get('changed'):
-                delay = data.get('state_delay') or 10
+                delay = data.get('state_delay') or DEFAULT_STATE_DELAY
                 time.sleep(delay)
             response = self.check_state(data)
             result.update(response)

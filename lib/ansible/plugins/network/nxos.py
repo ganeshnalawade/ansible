@@ -89,19 +89,23 @@ class NetworkModule(NetworkBase):
 
         result = {'changed': False}
 
-        if not self.check_authorization():
-            raise AnsibleError('configuration operations require privilege escalation')
+        if commands:
+            result['changed'] = True
+            result['commands']  = commands
 
-        use_session = os.getenv('ANSIBLE_EOS_USE_SESSIONS', True)
-        try:
-            use_session = int(use_session)
-        except ValueError:
-            pass
+        if self._play_context.check_mode:
+            return result
 
-        if not all((bool(use_session), self.supports_sessions())):
-            return self.configure(commands)
+        rc, out, err = self.exec_command('configure')
+        if rc != 0:
+            self._module.fail_json(msg='unable to enter configuration mode', output=err)
 
-        return self.configure_session(commands)
+        for cmd in config:
+            rc, out, err = self.exec_command(cmd)
+            if rc != 0:
+                self._module.fail_json(msg=err)
+
+        self.exec_command('end')
 
     def check_state(self, data):
         raise NotImplementedError
@@ -128,64 +132,4 @@ class NetworkModule(NetworkBase):
             rc, out, err = self.exec_command(cmd)
         return out.endswith('#')
 
-    def supports_sessions(self):
-        rc, out, err = self.exec_command('show configuration sessions')
-        return rc == 0
 
-    def send_config(self, commands):
-        multiline = False
-        rc = 0
-        for command in to_list(commands):
-            if command == 'end':
-                pass
-
-            if command.startswith('banner') or multiline:
-                multiline = True
-                command = self._module.jsonify({'command': command, 'sendonly': True})
-            elif command == 'EOF' and multiline:
-                multiline = False
-
-            rc, out, err = self.exec_command(command)
-            if rc != 0:
-                raise AnsibleError(err)
-
-    def configure(self, commands):
-        if not self._play_context.check_mode and commands:
-            rc, out, err = self.exec_command('configure')
-            if rc != 0:
-                raise AnsibleError('unable to enter configuration mode', output=err)
-            self.send_config(commands)
-            self.exec_command('end')
-
-        return {
-            'changed': len(commands) > 0,
-            'commands': commands
-        }
-
-    def configure_session(self, commands):
-        session = 'ansible_%s' % int(time.time())
-        display.vvv('eos configuration session id %s' % session, self._connection._play_context.remote_addr)
-
-        result = {'changed': False, 'commands': commands}
-
-        rc, out, err = self.exec_command('configure session %s' % session)
-        if rc != 0:
-            raise AnsibleError(str(err))
-
-        try:
-            self.send_config(commands)
-        except AnsibleError:
-            self.exec_command('abort')
-            raise
-
-        rc, out, err = self.exec_command('show session-config diffs')
-        if rc == 0 and out:
-            result['diff'] = {'prepared': out.strip()}
-            result['changed'] = True
-
-        if not self._play_context.check_mode:
-            self.exec_command('commit')
-        else:
-            self.exec_command('abort')
-
-        return result

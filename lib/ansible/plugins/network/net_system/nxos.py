@@ -23,7 +23,7 @@ import re
 
 from abc import ABCMeta, abstractmethod
 
-from ansible.plugins.capi.nxos import CapiModule as _CapiModule
+from ansible.plugins.network.nxos import NetworkModule as _NetworkModule
 from ansible.module_utils.six import with_metaclass
 
 try:
@@ -33,7 +33,14 @@ except ImportError:
     display = Display()
 
 
-class CapiModule(_CapiModule):
+class NetworkModule(_NetworkModule):
+
+    ATTRS = frozenset([
+        'hostname',
+        'domain_name',
+        'domain_list',
+        'name_servers'
+    ])
 
     def set_hostname(self, current_value, desired_value):
         return 'hostname %s' %  desired_value
@@ -84,4 +91,10 @@ class CapiModule(_CapiModule):
                 objects.append(item)
         return objects
 
+    def load_from_device(self):
+        obj = {}
+        for item in self.ATTRS:
+            value = self.invoke('get_%s' % item)
+            obj[item] = value
+        return obj
 
