@@ -23,7 +23,7 @@ import os
 import sys
 import copy
 
-from ansible.plugins import provider_loader
+from ansible.plugins import PluginLoader
 from ansible.plugins.action.normal import ActionModule as _ActionModule
 from ansible.errors import AnsibleError
 
@@ -44,28 +44,32 @@ class ActionModule(_ActionModule):
                     'got %s' % self._play_context.connection
             )
 
-        try:
-            display.vvvv('looking up provider plugin for %s' % self._play_context.network_os, self._play_context.remote_addr)
-            #provider = provider_loader.get(self._play_context.network_os, self._play_context)
-            provider = provider_loader.get('cli', self._play_context)
-            if not provider:
-                # TODO create a default provider
-                return {'failed': True, 'msg': 'network_os %s is not supported' % self._play_context.network_os}
-        except AnsibleError as exc:
-            return {'failed': True, 'msg': str(exc)}
-
         result = super(ActionModule, self).run(tmp, task_vars)
 
         request = {
-            'plugin': 'network',
-            'action': self._task.action,
             'spec': result['spec'],
             'config': result['config'],
             'state': result.get('state'),
             'state_delay': result.get('state_delay', 30)
         }
 
-        response = provider.run(request)
+        namespace = 'ansible.plugins.network.%s' % self._task.action
+        plugin_path = 'network_plugins'
+
+        loader = PluginLoader('NetworkModule', namespace, plugin_path, plugin_path)
+
+        try:
+            display.vvvv('looking up network plugin for %s' % self._play_context.network_os, self._play_context.remote_addr)
+            module = loader.get(self._play_context.network_os, self._play_context)
+
+            if not module:
+                # TODO create a default network plugin
+                return {'failed': True, 'msg': 'network_os %s is not supported' % self._play_context.network_os}
+
+            response = module.run(request)
+
+        except AnsibleError as exc:
+            return {'failed': True, 'msg': str(exc)}
 
         if 'diff' in result and not self._play_context.diff:
             del response['diff']

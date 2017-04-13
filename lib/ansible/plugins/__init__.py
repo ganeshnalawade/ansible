@@ -548,9 +548,4 @@ terminal_loader = PluginLoader(
     'terminal_plugins'
 )
 
-provider_loader = PluginLoader(
-    'ProviderModule',
-    'ansible.plugins.provider',
-    'provider_plugins',
-    'provider_plugins'
-)
+

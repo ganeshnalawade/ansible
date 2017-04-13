@@ -23,37 +23,62 @@ import re
 
 from abc import ABCMeta, abstractmethod
 
+from ansible.plugins import connection_loader
 from ansible.module_utils.six import with_metaclass, iteritems
 from ansible.module_utils.network_common import to_list
+from ansible.utils.path import unfrackpath
 
 
 class NetworkBase(with_metaclass(ABCMeta, object)):
 
-    def __init__(self, play_context, connection):
+    def __init__(self, play_context):
         self._play_context = play_context
-        self._connection = connection
+        self._connection = None
 
-    def exec_config(self, data):
-        spec = data['spec']
+    @abstractmethod
+    def create_connection(self):
+        pass
 
-        current = to_list(self.get())
-        key = next((k for k, v in iteritems(spec) if v.get('key')), None)
+    @abstractmethod
+    def load_from_device(self):
+        pass
 
-        result = {'changed': False}
-        updates = list()
+    @abstractmethod
+    def load_to_device(self):
+        pass
 
-        for config in to_list(data['config']):
-            item = next((i for i in current if i.get(key) == config.get(key)), None)
-            item = self.json_diff((item or current[0]), config)
-            updates.append(item)
+    @abstractmethod
+    def check_state(self, data):
+        pass
 
-        result.update(self.set(updates))
-        return result
+    def run(self, data):
+        result = {}
 
-    def exec_state(self, data):
-        result =  {}
-        #response = self.check(data)
-        #result.update(response)
+        self.create_connection()
+
+        if 'config' in data:
+            spec = data['spec']
+
+            current = to_list(self.load_from_device())
+            key = next((k for k, v in iteritems(spec) if v.get('key')), None)
+
+            result = {'changed': False}
+            updates = list()
+
+            for config in to_list(data['config']):
+                item = next((i for i in current if i.get(key) == config.get(key)), None)
+                item = self.json_diff((item or current[0]), config)
+                updates.append(item)
+
+            result.update(self.load_to_device(updates))
+
+        if 'state' in data:
+            if result.get('changed'):
+                delay = data.get('state_delay') or 10
+                time.sleep(delay)
+            response = self.check_state(data)
+            result.update(response)
+
         return result
 
     def sort(self, val):
@@ -100,6 +125,13 @@ class NetworkBase(with_metaclass(ABCMeta, object)):
         for item in set(desired).difference(current):
             objects.append((item, 'add'))
         return objects
+
+    def _get_socket_path(self, play_context):
+        """Returns the persistent socket path"""
+        ssh = connection_loader.get('ssh', class_only=True)
+        cp = ssh._create_control_path(play_context.remote_addr, play_context.port, play_context.remote_user)
+        path = unfrackpath("$HOME/.ansible/pc")
+        return cp % dict(directory=path)
 
 
 

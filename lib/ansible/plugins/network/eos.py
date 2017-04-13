@@ -21,10 +21,13 @@ __metaclass__ = type
 
 import re
 import os
+import sys
 import time
+import copy
 
 from abc import abstractmethod
 
+from ansible.plugins import connection_loader
 from ansible.plugins.network import NetworkBase
 from ansible.module_utils.six import iteritems
 from ansible.module_utils.network_common import to_list
@@ -51,18 +54,55 @@ class NetworkModule(NetworkBase):
         self.cache['config'] = str(out).strip()
         return str(out).strip()
 
-    @abstractmethod
+    def create_connection(self):
+        pc = copy.deepcopy(self._play_context)
+        pc.connection = 'network_cli'
+        pc.remote_user = self._play_context.connection_user
+        pc.become = True
+
+        self._connection = connection_loader.get('persistent', pc, sys.stdin)
+
+        self.socket_path = self._get_socket_path(pc)
+        display.vvvv('socket_path: %s' % self.socket_path, pc.remote_addr)
+
+        if not os.path.exists(self.socket_path):
+            # start the connection if it isn't started
+            display.vvvv('calling open_shell()', pc.remote_addr)
+            rc, out, err = self._connection.exec_command('open_shell()')
+            if not rc == 0:
+                raise AnsibleConnectionFailure('unable to open shell')
+        else:
+            display.vvvv('reuse existing control connection', pc.remote_addr)
+            # make sure we are in the right cli context which should be
+            # enable mode and not config module
+            rc, out, err = self._connection.exec_command('prompt()')
+            while str(out).strip().endswith(')#'):
+                display.vvvv('wrong context, sending exit to device', self._play_context.remote_addr)
+                self._connection.exec_command('exit')
+                rc, out, err = self._connection.exec_command('prompt()')
+
     def load_from_device(self):
-        pass
+        raise NotImplementedError
 
-    def get(self):
-        objects = self.load_from_device()
-        return to_list(objects)
-
-    def set(self, data):
+    def load_to_device(self, data):
         commands = self.to_commands(data)
-        return {'changed': False, 'commands': commands}
-        #return self.load_to_device(commands)
+
+        if not self.check_authorization():
+            raise AnsibleError('configuration operations require privilege escalation')
+
+        use_session = os.getenv('ANSIBLE_EOS_USE_SESSIONS', True)
+        try:
+            use_session = int(use_session)
+        except ValueError:
+            pass
+
+        if not all((bool(use_session), self.supports_sessions())):
+            return self.configure(commands)
+
+        return self.configure_session(commands)
+
+    def check_state(self, data):
+        raise NotImplementedError
 
     def to_commands(self, data):
         commands = list()
@@ -143,20 +183,5 @@ class NetworkModule(NetworkBase):
             self.exec_command('abort')
 
         return result
-
-    def load_config(self, request):
-        if not self.check_authorization():
-            raise AnsibleError('configuration operations require privilege escalation')
-
-        use_session = os.getenv('ANSIBLE_EOS_USE_SESSIONS', True)
-        try:
-            use_session = int(use_session)
-        except ValueError:
-            pass
-
-        if not all((bool(use_session), self.supports_sessions())):
-            return self.configure(commands)
-
-        return self.configure_session(commands)
 
 
