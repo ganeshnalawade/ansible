@@ -63,6 +63,12 @@ class Netconf:
             return warnings
         return fromstring(out)
 
+    def _exec_config(self, data):
+        updates = list()
+        for config in to_list(data['config']):
+            updates.append([([], k, v, None) for k, v in iteritems(config)])
+        return updates
+
     def children(root, iterable):
         for item in iterable:
             try:

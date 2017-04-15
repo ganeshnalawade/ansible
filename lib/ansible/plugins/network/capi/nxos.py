@@ -19,18 +19,7 @@
 from __future__ import (absolute_import, division, print_function)
 __metaclass__ = type
 
-import re
-import os
-import sys
-import time
-import copy
-
-from abc import abstractmethod
-
-from ansible.plugins import connection_loader
-from ansible.plugins.network import NetworkBase
-from ansible.plugins.network.cli import Cli
-from ansible.module_utils.six import iteritems
+from ansible.plugins.network.capi import NetworkModule as _NetworkModule
 from ansible.module_utils.network_common import to_list
 from ansible.errors import AnsibleError
 
@@ -41,7 +30,7 @@ except ImportError:
     from ansible.utils.display import Display
     display = Display()
 
-class NetworkModule(NetworkBase):
+class NetworkModule(_NetworkModule):
 
     network_connection = 'network_cli'
     network_os = 'nxos'
@@ -54,7 +43,7 @@ class NetworkModule(NetworkBase):
     def config(self):
         if 'config' in self.cache:
             return self.cache['config']
-        rc, out, err = self.exec_command('show running-config')
+        rc, out, err = self.send_command('show running-config')
         self.cache['config'] = str(out).strip()
         return str(out).strip()
 
@@ -73,16 +62,16 @@ class NetworkModule(NetworkBase):
         if self._play_context.check_mode:
             return result
 
-        rc, out, err = self.exec_command('configure')
+        rc, out, err = self.send_command('configure')
         if rc != 0:
             self._module.fail_json(msg='unable to enter configuration mode', output=err)
 
         for cmd in config:
-            rc, out, err = self.exec_command(cmd)
+            rc, out, err = self.send_command(cmd)
             if rc != 0:
                 self._module.fail_json(msg=err)
 
-        self.exec_command('end')
+        self.send_command('end')
 
     def check_state(self, data):
         raise NotImplementedError
@@ -99,14 +88,9 @@ class NetworkModule(NetworkBase):
                         commands.append(value)
         return commands
 
-    def exec_command(self, command):
-        if isinstance(command, dict):
-            command = self._module.jsonify(command)
-        return self._connection.exec_command(command)
-
     def check_authorization(self):
         for cmd in ['show clock', 'prompt()']:
-            rc, out, err = self.exec_command(cmd)
+            rc, out, err = self.send_command(cmd)
         return out.endswith('#')
 
 

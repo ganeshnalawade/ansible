@@ -29,7 +29,6 @@ from abc import ABCMeta, abstractmethod
 
 from ansible.plugins import connection_loader
 from ansible.module_utils.six import with_metaclass, iteritems
-from ansible.module_utils.network_common import to_list
 from ansible.utils.path import unfrackpath
 from ansible.errors import AnsibleError, AnsibleConnectionFailure
 
@@ -38,6 +37,7 @@ try:
 except ImportError:
     from ansible.utils.display import Display
     display = Display()
+
 
 DEFAULT_STATE_DELAY = os.getenv('ANSIBLE_NETWORK_DEFAULT_STATE_DELAY', 30)
 
@@ -63,7 +63,7 @@ class NetworkBase(with_metaclass(ABCMeta, object)):
     def check_state(self, data):
         pass
 
-    def _get_connection(self):
+    def _connect(self):
         pc = copy.deepcopy(self._play_context)
 
         pc.connection = self.network_connection
@@ -108,40 +108,21 @@ class NetworkBase(with_metaclass(ABCMeta, object)):
 
         return connection
 
-
     def run(self, data):
+
+        self._connection = self._get_connection()
 
         if None in (self.network_connection, self.network_os):
             raise AnsibleError('both network_connection and network_os must be defined')
-
-        self._connection = self._get_connection()
 
         result = {'changed': False}
         spec = data['spec']
 
         if 'config' in data:
-            updates = list()
-
-            if self.network_connection == 'network_cli':
-                current = to_list(self.load_from_device())
-                key = next((k for k, v in iteritems(spec) if v.get('key')), None)
-
-                for config in to_list(data['config']):
-                    item = next((i for i in current if i.get(key) == config.get(key)), None)
-                    item = self.json_diff((item or current[0]), config)
-                    updates.append(item)
-
-            elif self.network_connection == 'netconf':
-                for config in to_list(data['config']):
-                    updates.append([([], k, v, None) for k, v in iteritems(config)])
-
-            else:
-                raise AnsibleError('unknown operation')
-
+            updates = self._exec_config(data)
             result.update(self.load_to_device(updates))
 
         disable_state_checks = os.getenv('ANSIBLE_NETWORK_DISABLE_STATE_CHECKS', False)
-
         if not disable_state_checks and 'state' in data:
             if result.get('changed'):
                 delay = data.get('state_delay') or DEFAULT_STATE_DELAY
@@ -152,50 +133,10 @@ class NetworkBase(with_metaclass(ABCMeta, object)):
 
         return result
 
-    def sort(self, val):
-        if isinstance(val, list):
-            return sorted(val)
-        return val
-
     def invoke(self, name, *args, **kwargs):
         meth = getattr(self, name, None)
         if meth:
             return meth(*args, **kwargs)
-
-    def json_diff(self, current, desired, path=None):
-        """Diff two data structures and return updated keys
-
-        This will diff to dict objects and return a list of objects that
-        represent the updates.  The list of updates is in the form of
-        (path, key, current_value, desired_value)
-        """
-        updates = list()
-        path = path or list()
-
-        for key, value in iteritems(current):
-            if key not in desired:
-                desired_value = desired.get(key)
-                updates.append((list(path), key, value, desired_value))
-            else:
-                if isinstance(current[key], dict):
-                    path.append(key)
-                    updates.extend(self.json_diff(current[key], desired[key], list(path)))
-                    path.pop()
-                else:
-                    desired_value = desired.get(key)
-                    if desired_value is not None:
-                        if self.sort(current[key]) != self.sort(desired_value):
-                            updates.append((list(path), key, value, desired_value))
-
-        return updates
-
-    def list_diff(self, current, desired):
-        objects = list()
-        for item in set(current).difference(desired):
-            objects.append((item, 'remove'))
-        for item in set(desired).difference(current):
-            objects.append((item, 'add'))
-        return objects
 
     def _get_socket_path(self, play_context):
         """Returns the persistent socket path"""
@@ -203,8 +144,4 @@ class NetworkBase(with_metaclass(ABCMeta, object)):
         cp = ssh._create_control_path(play_context.remote_addr, play_context.port, play_context.remote_user)
         path = unfrackpath("$HOME/.ansible/pc")
         return cp % dict(directory=path)
-
-
-
-
 

@@ -19,15 +19,10 @@
 from __future__ import (absolute_import, division, print_function)
 __metaclass__ = type
 
-import re
 import os
-import sys
 import time
-import copy
 
-from ansible.plugins import connection_loader
-from ansible.plugins.network import NetworkBase
-from ansible.module_utils.six import iteritems
+from ansible.plugins.network.capi import NetworkModule as _NetworkModule
 from ansible.module_utils.network_common import to_list
 from ansible.errors import AnsibleError
 
@@ -38,7 +33,7 @@ except ImportError:
     from ansible.utils.display import Display
     display = Display()
 
-class NetworkModule(NetworkBase):
+class NetworkModule(_NetworkModule):
 
     network_connection = 'network_cli'
     network_os = 'eos'
@@ -51,7 +46,7 @@ class NetworkModule(NetworkBase):
     def config(self):
         if 'config' in self.cache:
             return self.cache['config']
-        rc, out, err = self.exec_command('show running-config')
+        rc, out, err = self.send_command('show running-config')
         self.cache['config'] = str(out).strip()
         return str(out).strip()
 
@@ -89,18 +84,13 @@ class NetworkModule(NetworkBase):
     def check_state(self, data):
         raise NotImplementedError
 
-    def exec_command(self, command):
-        if isinstance(command, dict):
-            command = self._module.jsonify(command)
-        return self._connection.exec_command(command)
-
     def check_authorization(self):
         for cmd in ['show clock', 'prompt()']:
-            rc, out, err = self.exec_command(cmd)
+            rc, out, err = self.send_command(cmd)
         return out.endswith('#')
 
     def supports_sessions(self):
-        rc, out, err = self.exec_command('show configuration sessions')
+        rc, out, err = self.send_command('show configuration sessions')
         return rc == 0
 
     def send_config(self, commands):
@@ -116,17 +106,17 @@ class NetworkModule(NetworkBase):
             elif command == 'EOF' and multiline:
                 multiline = False
 
-            rc, out, err = self.exec_command(command)
+            rc, out, err = self.send_command(command)
             if rc != 0:
                 raise AnsibleError(err)
 
     def configure(self, commands):
         if not self._play_context.check_mode and commands:
-            rc, out, err = self.exec_command('configure')
+            rc, out, err = self.send_command('configure')
             if rc != 0:
                 raise AnsibleError('unable to enter configuration mode', output=err)
             self.send_config(commands)
-            self.exec_command('end')
+            self.send_command('end')
 
         return {
             'changed': len(commands) > 0,
@@ -139,24 +129,24 @@ class NetworkModule(NetworkBase):
 
         result = {'changed': False, 'commands': commands}
 
-        rc, out, err = self.exec_command('configure session %s' % session)
+        rc, out, err = self.send_command('configure session %s' % session)
         if rc != 0:
             raise AnsibleError(str(err))
 
         try:
             self.send_config(commands)
         except AnsibleError:
-            self.exec_command('abort')
+            self.send_command('abort')
             raise
 
-        rc, out, err = self.exec_command('show session-config diffs')
+        rc, out, err = self.send_command('show session-config diffs')
         if rc == 0 and out:
             result['diff'] = {'prepared': out.strip()}
             result['changed'] = True
 
         if not self._play_context.check_mode:
-            self.exec_command('commit')
+            self.send_command('commit')
         else:
-            self.exec_command('abort')
+            self.send_command('abort')
 
         return result

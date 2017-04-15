@@ -21,7 +21,7 @@ __metaclass__ = type
 
 import re
 
-from ansible.plugins.network.eos import NetworkModule as _NetworkModule
+from ansible.plugins.network.capi.eos import NetworkModule as _NetworkModule
 
 try:
     from __main__ import display

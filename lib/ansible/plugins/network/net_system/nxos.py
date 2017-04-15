@@ -21,10 +21,7 @@ __metaclass__ = type
 
 import re
 
-from abc import ABCMeta, abstractmethod
-
-from ansible.plugins.network.nxos import NetworkModule as _NetworkModule
-from ansible.module_utils.six import with_metaclass
+from ansible.plugins.network.capi.nxos import NetworkModule as _NetworkModule
 
 try:
     from __main__ import display
