@@ -27,9 +27,6 @@ from contextlib import contextmanager
 from xml.etree.ElementTree import Element, SubElement
 from xml.etree.ElementTree import tostring, fromstring
 
-from ansible.plugins import connection_loader
-from ansible.errors import AnsibleError
-
 try:
     from __main__ import display
 except ImportError:
@@ -41,36 +38,6 @@ NS_MAP = {'nc': "urn:ietf:params:xml:ns:netconf:base:1.0"}
 
 
 class Netconf:
-
-    def _create_connection(self, play_context):
-        pc = copy.deepcopy(self._play_context)
-        pc.network_os = 'junos'
-        pc.connection = 'netconf'
-
-        pc.remote_addr = self._play_context.remote_addr
-        pc.port = self._play_context.port or 830
-        pc.remote_user = self._play_context.connection_user
-        pc.password = self._play_context.password
-        pc.private_key_file = self._play_context.private_key_file
-        pc.timeout = self._play_context.timeout
-
-        display.vvv('using connection plugin %s' % pc.connection, pc.remote_addr)
-        connection = connection_loader.get('persistent', pc, sys.stdin)
-
-        socket_path = self._get_socket_path(pc)
-        display.vvvv('socket_path: %s' % socket_path, pc.remote_addr)
-
-        if not os.path.exists(socket_path):
-            # start the connection if it isn't started
-            rc, out, err = connection.exec_command('open_session()')
-            if rc != 0:
-                return {'failed': True,
-                        'msg': 'unable to open shell. Please see: ' +
-                               'https://docs.ansible.com/ansible/network_debug_troubleshooting.html#unable-to-open-shell',
-                        'rc': rc}
-
-        return connection
-
 
     def send_request(self, obj, check_rc=True):
         request = tostring(obj)

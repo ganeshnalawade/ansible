@@ -33,10 +33,8 @@ CONFIG_FORMATS = frozenset(['xml', 'text', 'json', 'set'])
 
 class NetworkModule(NetworkBase, Netconf):
 
-    transport = 'netconf'
-
-    def create_connection(self):
-        return self._create_connection(self._play_context)
+    network_connection = 'netconf'
+    network_os = 'junos'
 
     def _map_obj_to_element(self, data):
         raise NotImplementedError
