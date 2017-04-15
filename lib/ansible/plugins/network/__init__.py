@@ -99,6 +99,13 @@ class NetworkBase(with_metaclass(ABCMeta, object)):
             if rc != 0:
                 raise AnsibleConnectionFailure('unable to open shell. Please see: https://docs.ansible.com/ansible/network_debug_troubleshooting.html#unable-to-open-shell')
 
+        else:
+            # called to reset the shell if its in an inconsistent state
+            display.vvvv('calling reset_shell() on existing connection', pc.remote_addr)
+            rc, out, err = connection.exec_command('reset_shell()')
+            if rc != 0:
+                raise AnsibleError('error calling reset_shell')
+
         return connection
 
 

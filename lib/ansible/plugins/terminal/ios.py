@@ -77,4 +77,10 @@ class TerminalModule(TerminalBase):
         elif prompt.endswith('#'):
             self._exec_cli_command('disable')
 
+    def on_reset_shell(self):
+        # make sure we are in the right cli context which should be
+        # enable mode and not config module
+        while str(self._get_prompt()).strip().endswith(')#'):
+            display.vvvv('wrong context, sending exit to device', self._play_context.remote_addr)
+            self._exec_cli_command('exit')
 

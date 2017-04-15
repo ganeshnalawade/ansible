@@ -152,6 +152,9 @@ class Connection(_Connection):
 
         return (0, 'ok', '')
 
+    def reset_shell(self):
+        return self._terminal.on_reset_shell()
+
     def receive(self, obj=None):
         """Handles receiving of output from command"""
         recv = StringIO()
@@ -269,6 +272,8 @@ class Connection(_Connection):
             return self.close_shell()
         elif obj['command'] == 'open_shell()':
             return self.open_shell()
+        elif obj['command'] == 'reset_shell()':
+            return self.reset_shell()
         elif obj['command'] == 'prompt()':
             return (0, self._matched_prompt, '')
 
