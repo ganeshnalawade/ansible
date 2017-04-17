@@ -56,15 +56,16 @@ class NetworkModule(NetworkBase, Netconf):
         if diff:
             diff = str(diff).strip()
             if not self._play_context.check_mode:
-                self.commit_configuration(confirm=confirm, comment=comment,
-                                          confirm_timeout=confirm_timeout)
+                self.commit_configuration()
             else:
                 self.discard_changes()
 
         return {'changed': diff is not None}
 
     def check_state(self, data):
-        raise NotImplementedError
+        pass
+        # TBD: Check the device is in desired state.
+        #raise NotImplementedError
 
     def _validate_rollback_id(self, value):
         try:

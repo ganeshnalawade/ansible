@@ -108,6 +108,12 @@ class NetworkBase(with_metaclass(ABCMeta, object)):
 
         return connection
 
+    def _get_connection(self):
+        if not self._connection:
+            self._connection = self._connect()
+        return self._connection
+
+
     def run(self, data):
 
         self._connection = self._get_connection()

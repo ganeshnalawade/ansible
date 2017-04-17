@@ -23,6 +23,8 @@ import os
 import sys
 import copy
 
+from ansible.module_utils.network_common import to_list
+from ansible.module_utils.six import iteritems
 from contextlib import contextmanager
 from xml.etree.ElementTree import Element, SubElement
 from xml.etree.ElementTree import tostring, fromstring

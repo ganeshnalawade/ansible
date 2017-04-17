@@ -21,7 +21,7 @@ __metaclass__ = type
 
 from xml.etree.ElementTree import Element, SubElement
 
-from ansible.plugins.network.junos import NetworkModule as _NetworkModule
+from ansible.plugins.network.netconf.junos import NetworkModule as _NetworkModule
 
 try:
     from __main__ import display
