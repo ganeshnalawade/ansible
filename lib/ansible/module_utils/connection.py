@@ -26,9 +26,13 @@
 # LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 # USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
+import os
+import uuid
 import socket
 import struct
 import signal
+
+from functools import partial
 
 from ansible.module_utils.basic import get_exception
 from ansible.module_utils._text import to_bytes, to_native
@@ -73,3 +77,54 @@ def exec_command(module, command):
     sf.close()
 
     return (rc, to_native(stdout), to_native(stderr))
+
+class Connection:
+
+    def __init__(self, module):
+        self._module = module
+
+    def __getattr__(self, name):
+        try:
+            return self.__dict__[name]
+        except KeyError:
+            if name.startswith('_'):
+                raise AttributeError("'%s' object has no attribute '%s'" % (self.__class__.__name__, name))
+            return partial(self.__rpc__, name)
+
+    def __rpc__(self, name, *args, **kwargs):
+        reqid = str(uuid.uuid4())
+        req = {'jsonrpc': '2.0', 'method': name, 'id': reqid}
+
+        params = list(args) or kwargs or None
+        if params:
+            req['params'] = params
+
+        if not self._module._socket_path:
+            self._module.fail_json(msg='provider support not available for this host')
+
+        if not os.path.exists(self._module._socket_path):
+            self._module.fail_json(msg='provider socket does not exist, is the provider running?')
+
+        try:
+            data = self._module.jsonify(req)
+            rc, out, err = exec_command(self._module, data)
+
+        except socket.error:
+            exc = get_exception()
+            sf.close()
+            self._module.fail_json(msg='unable to connect to socket', err=str(exc))
+
+        try:
+            response = self._module.from_json(out)
+        except ValueError as exc:
+            self._module.fail_json(msg=str(exc))
+
+        if response['id'] != reqid:
+            self._module.fail_json(msg='invalid id received')
+
+        if 'error' in response:
+            msg = response['error'].get('data') or response['error']['message']
+            self._module.fail_json(msg=msg)
+
+        return response['result']
+
