@@ -144,8 +144,7 @@ ansible_net_neighbors:
 """
 import re
 
-from ansible.module_utils.ios import get
-from ansible.module_utils.connection import Connection
+from ansible.module_utils.ios import run_commands
 from ansible.module_utils.ios import ios_argument_spec, check_args
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.six import iteritems
@@ -160,19 +159,13 @@ class FactsBase(object):
         self.module = module
         self.facts = dict()
         self.responses = None
-        self.connection = Connection(module)
 
 
     def populate(self):
-        self.responses = [self.connection.get(c) for c in self.COMMANDS]
-        #self.responses = get(self.module, self.COMMANDS, check_rc=False)
+        self.responses = run_commands(self.module, self.COMMANDS, check_rc=False)
 
     def run(self, cmd):
-        return self.connection.get(cmd)
-        #return get(self.module, cmd, check_rc=False)
-
-
-
+        return run_commands(self.module, cmd, check_rc=False)
 
 class Default(FactsBase):
 
@@ -187,8 +180,6 @@ class Default(FactsBase):
             self.facts['model'] = self.parse_model(data)
             self.facts['image'] = self.parse_image(data)
             self.facts['hostname'] = self.parse_hostname(data)
-
-        self.facts['capabilities'] = self.module.from_json(self.connection.get_capabilities())
 
     def parse_version(self, data):
         match = re.search(r'Version (\S+),', data)
@@ -247,11 +238,10 @@ class Config(FactsBase):
     COMMANDS = ['show running-config']
 
     def populate(self):
-        self.facts['config'] = self.connection.get_config()
-        #super(Config, self).populate()
-        #data = self.responses[0]
-        #if data:
-        #    self.facts['config'] = data
+        super(Config, self).populate()
+        data = self.responses[0]
+        if data:
+            self.facts['config'] = data
 
 
 class Interfaces(FactsBase):
@@ -280,7 +270,7 @@ class Interfaces(FactsBase):
 
         data = self.responses[2]
         if data:
-            neighbors = self.run('show lldp neighbors detail')
+            neighbors = self.run(['show lldp neighbors detail'])
             if neighbors:
                 self.facts['neighbors'] = self.parse_neighbors(neighbors[0])
 

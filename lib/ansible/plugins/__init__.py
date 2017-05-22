@@ -548,10 +548,3 @@ terminal_loader = PluginLoader(
     'terminal_plugins'
 )
 
-cliconf_loader = PluginLoader(
-    'Cliconf',
-    'ansible.plugins.cliconf',
-    'cliconf_plugins',
-    'cliconf_plugins',
-    required_base_class='CliconfBase'
-)
