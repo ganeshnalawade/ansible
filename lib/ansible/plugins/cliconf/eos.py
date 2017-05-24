@@ -40,20 +40,22 @@ class Cliconf(CliconfBase):
     terminal_stderr_re = [
         re.compile(br"% ?Error"),
         # re.compile(br"^% \w+", re.M),
+        re.compile(br"% User not present"),
         re.compile(br"% ?Bad secret"),
         re.compile(br"invalid input", re.I),
         re.compile(br"(?:incomplete|ambiguous) command", re.I),
         re.compile(br"connection timed out", re.I),
         re.compile(br"[^\r\n]+ not found", re.I),
         re.compile(br"'[^']' +returned error code: ?\d+"),
+        re.compile(br"[^\r\n]\/bin\/(?:ba)?sh")
     ]
 
     def _on_open_shell(self):
         try:
-            for cmd in [b'terminal length 0', b'terminal width 512']:
+            for cmd in (b'terminal length 0', b'terminal width 512'):
                 self.send_command(cmd)
         except AnsibleConnectionFailure:
-            raise AnsibleConnectionFailure('unable to set cliconf parameters')
+            raise AnsibleConnectionFailure('unable to set terminal parameters')
 
     def _on_authorize(self, passwd=None):
         if self._get_prompt().endswith(b'#'):
@@ -61,8 +63,6 @@ class Cliconf(CliconfBase):
 
         cmd = {u'command': u'enable'}
         if passwd:
-            # Note: python-3.5 cannot combine u"" and r"" together.  Thus make
-            # an r string and use to_text to ensure it's text on both py2 and py3.
             cmd[u'prompt'] = to_text(r"[\r\n]?password: $", errors='surrogate_or_strict')
             cmd[u'answer'] = passwd
 
@@ -74,7 +74,7 @@ class Cliconf(CliconfBase):
     def _on_deauthorize(self):
         prompt = self._get_prompt()
         if prompt is None:
-            # if prompt is None most likely the cliconf is hung up at a prompt
+            # if prompt is None most likely the terminal is hung up at a prompt
             return
 
         if b'(config' in prompt:
@@ -87,21 +87,17 @@ class Cliconf(CliconfBase):
     def get_device_info(self):
         device_info = {}
 
-        device_info['network_os'] = 'ios'
-        reply = self.get('show version')
-        data = to_text(reply, errors='surrogate_or_strict').strip()
+        device_info['network_os'] = 'eos'
+        reply = self.get('show version | json')
+        data = json.loads(reply)
 
-        match = re.search(r'Version (\S+),', data)
-        if match:
-            device_info['network_os_version'] = match.group(1)
+        device_info['network_os_version'] = data['version']
+        device_info['network_os_model'] = data['modelName']
 
-        match = re.search(r'^Cisco (.+) \(revision', data, re.M)
-        if match:
-            device_info['network_os_model'] = match.group(1)
+        reply = self.get('show hostname | json')
+        data = json.loads(reply)
 
-        match = re.search(r'^(.+) uptime', data, re.M)
-        if match:
-            device_info['network_hostname'] = match.group(1)
+        device_info['network_hostname'] = data['hostname']
 
         return device_info
 

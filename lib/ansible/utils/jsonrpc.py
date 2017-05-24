@@ -21,6 +21,8 @@ __metaclass__ = type
 import json
 import traceback
 
+from ansible.module_utils._text import to_text
+
 try:
     from __main__ import display
 except ImportError:
@@ -65,7 +67,7 @@ class Rpc:
                 result = rpc_method(*args, **kwargs)
             except Exception as exc:
                 display.display(traceback.format_exc(), log_only=True)
-                error = self.internal_error(data=str(exc))
+                error = self.internal_error(data=to_text(exc, errors='surrogate_then_replace'))
                 response = json.dumps(error)
             else:
                 if isinstance(result, dict) and 'jsonrpc' in result:

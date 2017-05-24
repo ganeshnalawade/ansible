@@ -70,7 +70,6 @@ class CliconfBase(with_metaclass(ABCMeta, object)):
     ]
 
     def __init__(self, connection):
-        display.display("-- CliconfBase  connection-- %s" % connection  )
         self._connection = connection
 
     def _alarm_handler(self, signum, frame):
@@ -84,6 +83,7 @@ class CliconfBase(with_metaclass(ABCMeta, object)):
         """
         signal.signal(signal.SIGALRM, self._alarm_handler)
         signal.alarm(timeout)
+        display.display("command: %s" % command, log_only=True)
         resp = self._connection.send(command, prompts, answer, send_only)
         signal.alarm(0)
         return resp
@@ -171,11 +171,4 @@ class CliconfBase(with_metaclass(ABCMeta, object)):
         rpc methods by device platform and return result
         as a string
         """
-        pass
-
-
-    @staticmethod
-    def guess_network_os(conn):
-        """Get os details by executing
-        command on remote device"""
         pass

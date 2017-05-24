@@ -34,12 +34,12 @@ class Cliconf(CliconfBase):
 
     terminal_stdout_re = [
         re.compile(br"[\r\n]?[\w+\-\.:\/\[\]]+(?:\([^\)]+\)){,3}(?:>|#) ?$"),
-        re.compile(br"\[\w+\@[\w\-\.]+(?: [^\]])\] ?[>#\$] ?$")
+        re.compile(br"\[\w+\@[\w\-\.]+(?: [^\]])\] ?[>#\$] ?$"),
+        re.compile(br']]>]]>[\r\n]?')
     ]
 
     terminal_stderr_re = [
         re.compile(br"% ?Error"),
-        # re.compile(br"^% \w+", re.M),
         re.compile(br"% ?Bad secret"),
         re.compile(br"invalid input", re.I),
         re.compile(br"(?:incomplete|ambiguous) command", re.I),
@@ -50,50 +50,25 @@ class Cliconf(CliconfBase):
 
     def _on_open_shell(self):
         try:
-            for cmd in [b'terminal length 0', b'terminal width 512']:
+            for cmd in (b'terminal length 0', b'terminal width 512', b'terminal exec prompt no-timestamp'):
                 self.send_command(cmd)
         except AnsibleConnectionFailure:
-            raise AnsibleConnectionFailure('unable to set cliconf parameters')
-
-    def _on_authorize(self, passwd=None):
-        if self._get_prompt().endswith(b'#'):
-            return
-
-        cmd = {u'command': u'enable'}
-        if passwd:
-            # Note: python-3.5 cannot combine u"" and r"" together.  Thus make
-            # an r string and use to_text to ensure it's text on both py2 and py3.
-            cmd[u'prompt'] = to_text(r"[\r\n]?password: $", errors='surrogate_or_strict')
-            cmd[u'answer'] = passwd
-
-        try:
-            self.send_command(to_bytes(json.dumps(cmd), errors='surrogate_or_strict'))
-        except AnsibleConnectionFailure:
-            raise AnsibleConnectionFailure('unable to elevate privilege to enable mode')
-
-    def _on_deauthorize(self):
-        prompt = self._get_prompt()
-        if prompt is None:
-            # if prompt is None most likely the cliconf is hung up at a prompt
-            return
-
-        if b'(config' in prompt:
-            self.send_command(b'end')
-            self.send_command(b'disable')
-
-        elif prompt.endswith(b'#'):
-            self.send_command(b'disable')
+            raise AnsibleConnectionFailure('unable to set terminal parameters')
 
     def get_device_info(self):
         device_info = {}
 
-        device_info['network_os'] = 'ios'
-        reply = self.get('show version')
+        device_info['network_os'] = 'iosxr'
+        reply = self.get('show version brief')
         data = to_text(reply, errors='surrogate_or_strict').strip()
 
-        match = re.search(r'Version (\S+),', data)
+        match = re.search(r'Version (\S+)$', data, re.M)
         if match:
             device_info['network_os_version'] = match.group(1)
+
+        match = re.search(r'image file is "(.+)"', data)
+        if match:
+            device_info['network_os_image'] = match.group(1)
 
         match = re.search(r'^Cisco (.+) \(revision', data, re.M)
         if match:
@@ -107,21 +82,33 @@ class Cliconf(CliconfBase):
 
     @enable_mode
     def get_config(self, source='running'):
-        lookup = {'running': 'running-config', 'startup': 'startup-config'}
-        return self.send_command('show %s' % lookup[source])
+        lookup = {u'running': u'running-config'}
+        return self.send_command(to_bytes('show %s' % lookup[source], errors='surrogate_or_strict'))
 
 
     @enable_mode
     def edit_config(self, commands):
-        for command in chain(['configure'], to_list(commands), ['end']):
-            self.send_command(command)
+        for command in chain([u'configure terminal'], to_list(commands), [u'end']):
+            self.send_command(to_bytes(command, errors='surrogate_or_strict'))
 
     def get(self, *args, **kwargs):
         return self.send_command(*args, **kwargs)
 
+    def commit(self, *args, **kwargs):
+        comment = kwargs.get('comment')
+        if comment:
+            command = 'commit {0}'.format(comment)
+        else:
+            command = 'commit'
+        self.send_command(to_bytes(command, errors='surrogate_or_strict'))
+
+    def discard_changes(self, *args, **kwargs):
+        self.send_command(to_bytes('abort', errors='surrogate_or_strict'))
+
     def get_capabilities(self):
         result = {}
-        result['rpc'] = self.get_supported_rpc()
-        result['network_api'] = 'cliconf'
-        result['device_info'] = self.get_device_info()
+        base_rpc = self.get_supported_rpc()
+        result[u'rpc'] = base_rpc.extend(['commit', 'discard_changes'])
+        result[u'network_api'] = u'cliconf'
+        result[u'device_info'] = self.get_device_info()
         return json.dumps(result)

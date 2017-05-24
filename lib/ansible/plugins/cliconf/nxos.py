@@ -25,7 +25,6 @@ import json
 from itertools import chain
 
 from ansible.errors import AnsibleConnectionFailure
-from ansible.module_utils._text import to_bytes, to_text
 from ansible.module_utils.network_common import to_list
 from ansible.plugins.cliconf import CliconfBase, enable_mode
 
@@ -33,77 +32,45 @@ from ansible.plugins.cliconf import CliconfBase, enable_mode
 class Cliconf(CliconfBase):
 
     terminal_stdout_re = [
-        re.compile(br"[\r\n]?[\w+\-\.:\/\[\]]+(?:\([^\)]+\)){,3}(?:>|#) ?$"),
-        re.compile(br"\[\w+\@[\w\-\.]+(?: [^\]])\] ?[>#\$] ?$")
+        re.compile(br'[\r\n]?[a-zA-Z]{1}[a-zA-Z0-9-]*[>|#|%](?:\s*)$'),
+        re.compile(br'[\r\n]?[a-zA-Z]{1}[a-zA-Z0-9-]*\(.+\)#(?:\s*)$')
     ]
 
     terminal_stderr_re = [
         re.compile(br"% ?Error"),
-        # re.compile(br"^% \w+", re.M),
+        re.compile(br"^% \w+", re.M),
         re.compile(br"% ?Bad secret"),
         re.compile(br"invalid input", re.I),
         re.compile(br"(?:incomplete|ambiguous) command", re.I),
         re.compile(br"connection timed out", re.I),
         re.compile(br"[^\r\n]+ not found", re.I),
         re.compile(br"'[^']' +returned error code: ?\d+"),
+        re.compile(br"syntax error"),
+        re.compile(br"unknown command"),
+        re.compile(br"user not present")
     ]
 
     def _on_open_shell(self):
         try:
-            for cmd in [b'terminal length 0', b'terminal width 512']:
+            for cmd in (b'terminal length 0', b'terminal width 511'):
                 self.send_command(cmd)
         except AnsibleConnectionFailure:
-            raise AnsibleConnectionFailure('unable to set cliconf parameters')
-
-    def _on_authorize(self, passwd=None):
-        if self._get_prompt().endswith(b'#'):
-            return
-
-        cmd = {u'command': u'enable'}
-        if passwd:
-            # Note: python-3.5 cannot combine u"" and r"" together.  Thus make
-            # an r string and use to_text to ensure it's text on both py2 and py3.
-            cmd[u'prompt'] = to_text(r"[\r\n]?password: $", errors='surrogate_or_strict')
-            cmd[u'answer'] = passwd
-
-        try:
-            self.send_command(to_bytes(json.dumps(cmd), errors='surrogate_or_strict'))
-        except AnsibleConnectionFailure:
-            raise AnsibleConnectionFailure('unable to elevate privilege to enable mode')
-
-    def _on_deauthorize(self):
-        prompt = self._get_prompt()
-        if prompt is None:
-            # if prompt is None most likely the cliconf is hung up at a prompt
-            return
-
-        if b'(config' in prompt:
-            self.send_command(b'end')
-            self.send_command(b'disable')
-
-        elif prompt.endswith(b'#'):
-            self.send_command(b'disable')
+            raise AnsibleConnectionFailure('unable to set terminal parameters')
 
     def get_device_info(self):
         device_info = {}
 
-        device_info['network_os'] = 'ios'
-        reply = self.get('show version')
-        data = to_text(reply, errors='surrogate_or_strict').strip()
+        device_info['network_os'] = 'nxos'
+        reply = self.get('show version | json')
+        data = json.loads(reply)
 
-        match = re.search(r'Version (\S+),', data)
-        if match:
-            device_info['network_os_version'] = match.group(1)
-
-        match = re.search(r'^Cisco (.+) \(revision', data, re.M)
-        if match:
-            device_info['network_os_model'] = match.group(1)
-
-        match = re.search(r'^(.+) uptime', data, re.M)
-        if match:
-            device_info['network_hostname'] = match.group(1)
+        device_info['network_os_version'] = data['sys_ver_str']
+        device_info['network_os_model'] = data['chassis_id']
+        device_info['network_hostname'] = data['host_name']
+        device_info['network_os_image'] = data['isan_file_name']
 
         return device_info
+
 
     @enable_mode
     def get_config(self, source='running'):
