@@ -1913,6 +1913,24 @@ class AnsibleModule(object):
         except ValueError:
             raise TypeError('%s cannot be converted to a Bit value' % type(value))
 
+    def _check_single_argument_type(self, wanted, field):
+        """Ensure a single parameter is of a requested type"""
+        if not callable(wanted):
+            if wanted is None:
+                # Mostly we want to default to str.
+                # For values set to None explicitly, return None instead as
+                # that allows a user to unset a parameter
+                if field is None:
+                    return None
+                wanted = 'str'
+            type_checker = self._CHECK_ARGUMENT_TYPES_DISPATCHER[wanted]
+        else:
+            # set the type_checker to the callable, and reset wanted to the callable's name (or type if it doesn't have one, ala MagicMock)
+            type_checker = wanted
+            wanted = getattr(wanted, '__name__', to_native(type(wanted)))
+
+        return type_checker(field)
+
     def _handle_options(self, argument_spec=None, params=None):
         ''' deal with options to create sub spec '''
         if argument_spec is None:
@@ -1923,11 +1941,15 @@ class AnsibleModule(object):
         for (k, v) in argument_spec.items():
             wanted = v.get('type', None)
             if wanted == 'dict' or (wanted == 'list' and v.get('elements', '') == 'dict'):
+                self._options_context.append(k)
+
+                # value of options should be a valid argument spec.
                 spec = v.get('options', None)
                 if spec is None or not params[k]:
                     continue
 
-                self._options_context.append(k)
+                if spec and (not isinstance(spec, dict)):
+                    self.fail_json(msg="value of options must be of type dict, given %d" % type(spec))
 
                 if isinstance(params[k], dict):
                     elements = [params[k]]
@@ -1979,33 +2001,21 @@ class AnsibleModule(object):
             wanted = v.get('type', None)
             if k not in param:
                 continue
-
-            value = param[k]
-            if value is None:
+            if param[k] is None:
                 continue
 
-            if not callable(wanted):
-                if wanted is None:
-                    # Mostly we want to default to str.
-                    # For values set to None explicitly, return None instead as
-                    # that allows a user to unset a parameter
-                    if param[k] is None:
-                        continue
-                    wanted = 'str'
-                try:
-                    type_checker = self._CHECK_ARGUMENT_TYPES_DISPATCHER[wanted]
-                except KeyError:
-                    self.fail_json(msg="implementation error: unknown type %s requested for %s" % (wanted, k))
-            else:
-                # set the type_checker to the callable, and reset wanted to the callable's name (or type if it doesn't have one, ala MagicMock)
-                type_checker = wanted
-                wanted = getattr(wanted, '__name__', to_native(type(wanted)))
-
             try:
-                param[k] = type_checker(value)
+                if wanted == 'list' and v.get('elements', None) is not None and isinstance(param[k], list):
+                    elem_type = v['elements']
+                    for idx, element in enumerate(param[k]):
+                        param[k][idx] = self._check_single_argument_type(elem_type, element)
+                else:
+                    param[k] = self._check_single_argument_type(wanted, param[k])
+            except KeyError:
+                self.fail_json(msg="implementation error: unknown type %s requested for %s" % (wanted, k))
             except (TypeError, ValueError) as e:
                 self.fail_json(msg="argument %s is of type %s and we were unable to convert to %s: %s" %
-                               (k, type(value), wanted, to_native(e)))
+                                   (k, type(param[k]), wanted, to_native(e)))
 
     def _set_defaults(self, pre=True, spec=None, param=None):
         if spec is None:
