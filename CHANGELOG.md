@@ -105,7 +105,7 @@ Ansible Changes By Release
 * Fix issue with user module when local is true
   (https://github.com/ansible/ansible/pull/32262 and https://github.com/ansible/ansible/pull/32411)
 * Fix wrong prompt issue for network modules (https://github.com/ansible/ansible/pull/32426)
-
+* Fix eos_eapi to enable non-default vrfs if the default vrf is already configured (https://github.com/ansible/ansible/pull/32112)
 
 <a id="2.4.1"></a>
 
