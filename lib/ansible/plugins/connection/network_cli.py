@@ -266,7 +266,10 @@ class Connection(ConnectionBase):
         messages = ['updating play_context for connection']
         if self._play_context.become is False and play_context.become is True:
             auth_pass = play_context.become_pass
+            display.display("-- update_play_context -> auth_pass: %s" % auth_pass, log_only=True)
+            display.display("-- update_play_context -> self.get_prompt() before: %s" % self.get_prompt(), log_only=True)
             self._terminal.on_become(passwd=auth_pass)
+            display.display("-- update_play_context -> self.get_prompt() before: %s" % self.get_prompt(), log_only=True)
             messages.append('authorizing connection')
 
         elif self._play_context.become is True and not play_context.become:
@@ -320,7 +323,10 @@ class Connection(ConnectionBase):
         if self._play_context.become and self._play_context.become_method == 'enable':
             display.vvvv('firing event: on_become', host=self._play_context.remote_addr)
             auth_pass = self._play_context.become_pass
+            display.display("-- _connect -> auth_pass: %s" % auth_pass, log_only=True)
+            display.display("-- _connect -> self.get_prompt() before: %s" % self.get_prompt(), log_only=True)
             self._terminal.on_become(passwd=auth_pass)
+            display.display("-- _connect -> self.get_prompt() After: %s" % self.get_prompt(), log_only=True)
 
         display.vvvv('ssh connection has completed successfully', host=self._play_context.remote_addr)
         self._connected = True
@@ -412,9 +418,15 @@ class Connection(ConnectionBase):
         try:
             self._history.append(command)
             self._ssh_shell.sendall(b'%s\r' % command)
+            display.display("-- send -> command: %s\r" % command, log_only=True)
+            display.display("-- send -> prompt: %s" % prompt, log_only=True)
+            display.display("-- send -> answer: %s" % answer, log_only=True)
+            display.display("-- send -> newline: %s" % newline, log_only=True)
+            display.display("-- send -> sendonly: %s" % sendonly, log_only=True)
             if sendonly:
                 return
             response = self.receive(command, prompt, answer, newline)
+            display.display("-- send -> response: %s" % response, log_only=True)
             return to_text(response, errors='surrogate_or_strict')
         except (socket.timeout, AttributeError):
             display.vvvv(traceback.format_exc(), host=self._play_context.remote_addr)
