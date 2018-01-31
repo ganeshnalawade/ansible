@@ -71,9 +71,9 @@ class TerminalModule(TerminalBase):
             prompt = self._get_prompt()
             if not prompt.endswith(b'#'):
                 raise AnsibleConnectionFailure('failed to elevate privilege to enable mode still at prompt [%s]' % prompt)
-        except AnsibleConnectionFailure:
+        except AnsibleConnectionFailure as e:
             prompt = self._get_prompt()
-            raise AnsibleConnectionFailure('unable to elevate privilege to enable mode, at prompt [%s]' % prompt)
+            raise AnsibleConnectionFailure('unable to elevate privilege to enable mode, at prompt [%s] with error: %s' % (prompt, e.message))
 
     def on_unbecome(self):
         prompt = self._get_prompt()

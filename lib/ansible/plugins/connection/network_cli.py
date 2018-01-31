@@ -283,8 +283,10 @@ class Connection(ConnectionBase):
         '''
         Connects to the remote device and starts the terminal
         '''
+        display.display("-- _connect before --", log_only=True)
         if self.connected:
             return
+        display.display("-- _connect after --", log_only=True)
 
         p = connection_loader.get('paramiko', self._play_context, '/dev/null')
         p.set_options(direct={'look_for_keys': not bool(self._play_context.password and not self._play_context.private_key_file)})
@@ -404,6 +406,7 @@ class Connection(ConnectionBase):
             elif prompts and handled:
                 # check again even when handled, a sub-prompt could be
                 # repeating (like in the case of a wrong enable password, etc)
+                display.display("-- check for second prompt --" % command, log_only=True)
                 self._handle_prompt(window, prompts, answer, newline)
 
             if self._find_prompt(window):
@@ -450,12 +453,18 @@ class Connection(ConnectionBase):
                 A carriage return is automatically appended to this string.
         :returns: True if a prompt was found in ``resp``.  False otherwise
         '''
+        display.display(" -- _handle_prompt resp -- %s" % resp, log_only=True)
+        display.display(" -- _handle_prompt prompts -- %s" % prompts, log_only=True)
+        display.display(" -- _handle_prompt answer -- %s" % answer, log_only=True)
+        display.display(" -- _handle_prompt newline -- %s" % newline, log_only=True)
         if not isinstance(prompts, list):
             prompts = [prompts]
         prompts = [re.compile(r, re.I) for r in prompts]
         for regex in prompts:
             match = regex.search(resp)
             if match:
+                display.display(" -- _handle_prompt match -- %s" % match.group(), log_only=True)
+                display.display(" -- _handle_prompt regex -- %s" % regex.pattern, log_only=True)
                 self._ssh_shell.sendall(b'%s' % answer)
                 if newline:
                     self._ssh_shell.sendall(b'\r')
