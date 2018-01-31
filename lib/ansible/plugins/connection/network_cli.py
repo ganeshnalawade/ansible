@@ -284,6 +284,7 @@ class Connection(ConnectionBase):
         Connects to the remote device and starts the terminal
         '''
         display.display("-- _connect before --", log_only=True)
+        display.display("-- _connect become_pass: %s" % self._play_context.become_pass, log_only=True)
         if self.connected:
             return
         display.display("-- _connect after --", log_only=True)
