@@ -266,7 +266,10 @@ class Connection(ConnectionBase):
         messages = ['updating play_context for connection']
         if self._play_context.become is False and play_context.become is True:
             auth_pass = play_context.become_pass
+            display.display("-- update_play_context -> auth_pass: %s" % auth_pass, log_only=True)
+            display.display("-- update_play_context -> self.get_prompt() before: %s" % self.get_prompt(), log_only=True)
             self._terminal.on_become(passwd=auth_pass)
+            display.display("-- update_play_context -> self.get_prompt() before: %s" % self.get_prompt(), log_only=True)
             messages.append('authorizing connection')
 
         elif self._play_context.become is True and not play_context.become:
@@ -280,8 +283,11 @@ class Connection(ConnectionBase):
         '''
         Connects to the remote device and starts the terminal
         '''
+        display.display("-- _connect before --", log_only=True)
+        display.display("-- _connect become_pass: %s" % self._play_context.become_pass, log_only=True)
         if self.connected:
             return
+        display.display("-- _connect after --", log_only=True)
 
         self.paramiko_conn = connection_loader.get('paramiko', self._play_context, '/dev/null')
         self.paramiko_conn.set_options(direct={'look_for_keys': not bool(self._play_context.password and not self._play_context.private_key_file)})
@@ -320,7 +326,10 @@ class Connection(ConnectionBase):
         if self._play_context.become and self._play_context.become_method == 'enable':
             display.vvvv('firing event: on_become', host=self._play_context.remote_addr)
             auth_pass = self._play_context.become_pass
+            display.display("-- _connect -> auth_pass: %s" % auth_pass, log_only=True)
+            display.display("-- _connect -> self.get_prompt() before: %s" % self.get_prompt(), log_only=True)
             self._terminal.on_become(passwd=auth_pass)
+            display.display("-- _connect -> self.get_prompt() After: %s" % self.get_prompt(), log_only=True)
 
         display.vvvv('ssh connection has completed successfully', host=self._play_context.remote_addr)
         self._connected = True
@@ -404,6 +413,7 @@ class Connection(ConnectionBase):
                 # check again even when handled, if same prompt repeats in next window
                 # (like in the case of a wrong enable password, etc) indicates
                 # value of answer is wrong, report this as error.
+                display.display("-- check for second prompt --" % command, log_only=True)
                 if self._handle_prompt(window, prompts, answer, newline, prompt_retry_check):
                     raise AnsibleConnectionFailure("For matched prompt '%s', answer is not valid" % self._matched_cmd_prompt)
 
@@ -419,9 +429,15 @@ class Connection(ConnectionBase):
         try:
             self._history.append(command)
             self._ssh_shell.sendall(b'%s\r' % command)
+            display.display("-- send -> command: %s\r" % command, log_only=True)
+            display.display("-- send -> prompt: %s" % prompt, log_only=True)
+            display.display("-- send -> answer: %s" % answer, log_only=True)
+            display.display("-- send -> newline: %s" % newline, log_only=True)
+            display.display("-- send -> sendonly: %s" % sendonly, log_only=True)
             if sendonly:
                 return
             response = self.receive(command, prompt, answer, newline, prompt_retry_check)
+            display.display("-- send -> response: %s" % response, log_only=True)
             return to_text(response, errors='surrogate_or_strict')
         except (socket.timeout, AttributeError):
             display.vvvv(traceback.format_exc(), host=self._play_context.remote_addr)
@@ -445,12 +461,18 @@ class Connection(ConnectionBase):
                 A carriage return is automatically appended to this string.
         :returns: True if a prompt was found in ``resp``.  False otherwise
         '''
+        display.display(" -- _handle_prompt resp -- %s" % resp, log_only=True)
+        display.display(" -- _handle_prompt prompts -- %s" % prompts, log_only=True)
+        display.display(" -- _handle_prompt answer -- %s" % answer, log_only=True)
+        display.display(" -- _handle_prompt newline -- %s" % newline, log_only=True)
         if not isinstance(prompts, list):
             prompts = [prompts]
         prompts = [re.compile(r, re.I) for r in prompts]
         for regex in prompts:
             match = regex.search(resp)
             if match:
+                display.display(" -- _handle_prompt match -- %s" % match.group(), log_only=True)
+                display.display(" -- _handle_prompt regex -- %s" % regex.pattern, log_only=True)
                 # if prompt_retry_check is enabled to check if same prompt is
                 # repeated don't send answer again.
                 if not prompt_retry_check:
