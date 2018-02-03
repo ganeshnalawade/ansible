@@ -413,7 +413,7 @@ class Connection(ConnectionBase):
                 # check again even when handled, if same prompt repeats in next window
                 # (like in the case of a wrong enable password, etc) indicates
                 # value of answer is wrong, report this as error.
-                display.display("-- check for second prompt --" % command, log_only=True)
+                display.display("-- check for second prompt %s --" % command, log_only=True)
                 if self._handle_prompt(window, prompts, answer, newline, prompt_retry_check):
                     raise AnsibleConnectionFailure("For matched prompt '%s', answer is not valid" % self._matched_cmd_prompt)
 
