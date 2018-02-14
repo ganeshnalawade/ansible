@@ -385,7 +385,7 @@ class Connection(ConnectionBase):
 
         while True:
             data = self._ssh_shell.recv(256)
-
+            display.display("-- receive -> data: %s --" % data, log_only=True)
             # when a channel stream is closed, received data will be empty
             if not data:
                 break
@@ -409,6 +409,7 @@ class Connection(ConnectionBase):
 
             if self._find_prompt(window):
                 self._last_response = recv.getvalue()
+                display.display("-- receive -> self._last_response: %s --" % self._last_response, log_only=True)
                 resp = self._strip(self._last_response)
                 return self._sanitize(resp, command)
 
@@ -477,10 +478,11 @@ class Connection(ConnectionBase):
         '''
         errored_response = None
         is_error_message = False
+        display.display("-- _find_prompt -> response: %s --" % response, log_only=True)
         for regex in self._terminal.terminal_stderr_re:
             if regex.search(response):
                 is_error_message = True
-
+                display.display("-- _find_prompt -> terminal_stderr_re --", log_only=True)
                 # Check if error response ends with command prompt if not
                 # receive it buffered prompt
                 for regex in self._terminal.terminal_stdout_re:
@@ -488,6 +490,8 @@ class Connection(ConnectionBase):
                     if match:
                         errored_response = response
                         self._matched_prompt = match.group()
+                        display.display("-- _find_prompt -> error -> errored_response: %s --" % errored_response, log_only=True)
+                        display.display("-- _find_prompt -> error -> self._matched_prompt: %s --" % self._matched_prompt, log_only=True)
                         break
 
         if not is_error_message:
@@ -496,6 +500,8 @@ class Connection(ConnectionBase):
                 if match:
                     self._matched_pattern = regex.pattern
                     self._matched_prompt = match.group()
+                    display.display("-- _find_prompt -> self._matched_pattern: %s --" % errored_response, log_only=True)
+                    display.display("-- _find_prompt -> self._matched_prompt: %s --" % self._matched_prompt, log_only=True)
                     if not errored_response:
                         return True
 
