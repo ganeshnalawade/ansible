@@ -47,6 +47,9 @@ class TerminalModule(TerminalBase):
         re.compile(br"'[^']' +returned error code: ?\d+"),
     ]
 
+    terminal_initial_prompt = b'Press any key to continue'
+    terminal_initial_answer = b'\r'
+
     def on_open_shell(self):
         try:
             self._exec_cli_command(b'no pag')

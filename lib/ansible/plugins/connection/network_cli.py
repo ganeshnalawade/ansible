@@ -312,7 +312,7 @@ class Connection(ConnectionBase):
         else:
             display.vvvv('unable to load cliconf for network_os %s' % network_os)
 
-        self.receive()
+        self.receive(prompts=self._terminal.terminal_initial_prompt, answer=self._terminal.terminal_initial_answer)
 
         display.vvvv('firing event: on_open_shell()', host=self._play_context.remote_addr)
         self._terminal.on_open_shell()
@@ -388,7 +388,7 @@ class Connection(ConnectionBase):
 
         while True:
             data = self._ssh_shell.recv(256)
-
+            display.display("-- receive: data: %s. --" % data, log_only=True)
             # when a channel stream is closed, received data will be empty
             if not data:
                 break
@@ -420,11 +420,13 @@ class Connection(ConnectionBase):
         Sends the command to the device in the opened shell
         '''
         try:
+            display.display("-- send: command: %s. --" % command, log_only=True)
             self._history.append(command)
             self._ssh_shell.sendall(b'%s\r' % command)
             if sendonly:
                 return
             response = self.receive(command, prompt, answer, newline, prompt_retry_check)
+            display.display("-- send: response: %s. --" % response, log_only=True)
             return to_text(response, errors='surrogate_or_strict')
         except (socket.timeout, AttributeError):
             display.vvvv(traceback.format_exc(), host=self._play_context.remote_addr)
@@ -451,6 +453,10 @@ class Connection(ConnectionBase):
         if not isinstance(prompts, list):
             prompts = [prompts]
         prompts = [re.compile(r, re.I) for r in prompts]
+        display.display("-- _handle_prompt: resp: %s. --" % resp, log_only=True)
+        display.display("-- _handle_prompt: prompts: %s. --" % prompts, log_only=True)
+        display.display("-- _handle_prompt: answer: %s. --" % answer, log_only=True)
+        display.display("-- _handle_prompt: newline: %s. --" % newline, log_only=True)
         for regex in prompts:
             match = regex.search(resp)
             if match:
@@ -461,6 +467,7 @@ class Connection(ConnectionBase):
                     if newline:
                         self._ssh_shell.sendall(b'\r')
                 self._matched_cmd_prompt = match.group()
+                display.display("-- _handle_prompt: _matched_cmd_prompt: %s. --" % self._matched_cmd_prompt, log_only=True)
                 return True
         return False
 
@@ -480,6 +487,7 @@ class Connection(ConnectionBase):
         '''
         errored_response = None
         is_error_message = False
+        display.display("-- _find_prompt: response: %s. --" % response, log_only=True)
         for regex in self._terminal.terminal_stderr_re:
             if regex.search(response):
                 is_error_message = True
@@ -492,6 +500,9 @@ class Connection(ConnectionBase):
                         errored_response = response
                         self._matched_pattern = regex.pattern
                         self._matched_prompt = match.group()
+                        display.display("-- _find_prompt: errored: errored_response: %s. --" % errored_response, log_only=True)
+                        display.display("-- _find_prompt: errored: self._matched_pattern: %s. --" % self._matched_pattern, log_only=True)
+                        display.display("-- _find_prompt: errored: self._matched_prompt: %s. --" % self._matched_prompt, log_only=True)
                         break
 
         if not is_error_message:
@@ -500,8 +511,11 @@ class Connection(ConnectionBase):
                 if match:
                     self._matched_pattern = regex.pattern
                     self._matched_prompt = match.group()
+                    display.display("-- _find_prompt: matched: self._matched_pattern %s. --" % self._matched_pattern, log_only=True)
+                    display.display("-- _find_prompt: matched: self._matched_prompt %s. --" % self._matched_prompt, log_only=True)
                     if not errored_response:
                         return True
+                display.display("-- _find_prompt: regex not matched: regex.pattern %s. --" % regex.pattern, log_only=True)
 
         if errored_response:
             raise AnsibleConnectionFailure(errored_response)
