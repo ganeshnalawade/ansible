@@ -40,7 +40,7 @@ class TerminalModule(TerminalBase):
         re.compile(br"[\r\n]?[\w]*\(.+\) ?#(?:\s*)$"),
         re.compile(br"[pP]assword:$"),
         re.compile(br"(?<=\s)[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\s*#\s*$"),
-        re.compile(br"[\r\n]?[\w\+\-\.:\/\[\]]+(?:\([^\)]+\)){0,3}(?:[>#]) ?.*$")
+        re.compile(br"[\r\n]?[\w\+\-\.:\/\[\]]+(?:\([^\)]+\)){0,3}(?:[>#]) ?$")
     ]
 
     terminal_stderr_re = [
@@ -57,6 +57,7 @@ class TerminalModule(TerminalBase):
 
     terminal_initial_prompt = b'Press any key to continue'
     terminal_initial_answer = b'\r'
+    terminal_inital_prompt_newline = False
 
     def on_open_shell(self):
         try:
