@@ -85,13 +85,14 @@ class CliconfBase(with_metaclass(ABCMeta, object)):
 
     def __init__(self, connection):
         self._connection = connection
+        self.history = list()
 
     def _alarm_handler(self, signum, frame):
         """Alarm handler raised in case of command timeout """
         display.display('closing shell due to command timeout (%s seconds).' % self._connection._play_context.timeout, log_only=True)
         self.close()
 
-    def send_command(self, command, prompt=None, answer=None, sendonly=False, newline=True, prompt_retry_check=False):
+    def send_command(self, command, prompt=None, answer=None, sendonly=False, newline=True, prompt_retry_check=False, nolog=True):
         """Executes a cli command and returns the results
         This method will execute the CLI command on the connection and return
         the results to the caller.  The command output will be returned as a
@@ -99,12 +100,21 @@ class CliconfBase(with_metaclass(ABCMeta, object)):
         """
         kwargs = {'command': to_bytes(command), 'sendonly': sendonly,
                   'newline': newline, 'prompt_retry_check': prompt_retry_check}
+
+        if nolog not in (True, False):
+            nolog = True
+
         if prompt is not None:
             kwargs['prompt'] = to_bytes(prompt)
         if answer is not None:
             kwargs['answer'] = to_bytes(answer)
 
         resp = self._connection.send(**kwargs)
+
+        if nolog:
+            self.history.append((kwargs['command'], '*****'))
+        else:
+            self.history.append((kwargs['command'], resp))
         return resp
 
     def get_base_rpc(self):
@@ -132,17 +142,17 @@ class CliconfBase(with_metaclass(ABCMeta, object)):
         pass
 
     @abstractmethod
-    def edit_config(self, commands=None):
-        """Loads the specified commands into the remote device
-        This method will load the commands into the remote device.  This
-        method will make sure the device is in the proper context before
-        send the commands (eg config mode)
-        :args:
-            arg[0] command: List of configuration commands
-        :kwargs:
-          Keywords supported
-            :command: the command string to execute
-        :returns: Returns output received from remote device as byte string
+    def edit_config(self, candidate, replace=False, commit=False, format='text', nolog=True):
+        """
+        Edit the configuration on the remote device.
+        :param candidate: The device configuration as a string to apply on remote host
+        :param replace: Boolean flag to indicate if the running configuration should be entirely
+                        replaced by candidate configuration.
+        :param commit: Bool flag to indicate if the check mode is enabled or not
+        :param format: Format of the candidate configuration
+        :param nolog: Boolean value to indicate response received from remote host should be logged
+                      or not.
+        :return: Response received for remote host in string format
         """
         pass
 
@@ -163,10 +173,36 @@ class CliconfBase(with_metaclass(ABCMeta, object)):
 
     @abstractmethod
     def get_capabilities(self):
-        """Retrieves device information and supported
-        rpc methods by device platform and return result
-        as a string
+        """Retrieves device information, supported
+        rpc methods and device capabilities supported by the network platform and return result
+        as a string.
         :returns: Returns output received from remote device as byte string
+        eg:
+            {
+
+                'rpc': ['get_config', 'edit_config', 'get_capabilities', 'get', 'commit'],
+                'network_api': 'cliconf',
+                'device_info': {
+                    'network_os': '',
+                    'network_os_version': '',
+                    'network_os_model': '',
+                    'network_os_hostname': '',
+                    'network_os_image': '',
+                    'network_os_platform': '',
+                },
+                'config_capability': {
+                    'format': ['text', 'json', 'xml', 'set'], # format of configuration supported on given platform
+                    'match': ['line', 'strict', 'exact', 'none'],
+                    'supports_replace': True/False,            # Boolean value to identify if config should be merged or replaced
+                    'supports_commit': True/False,             # Boolean value to identify if commit is supported by device or not
+                    'supports_rollback': True/False,           # Boolean value to identify if rollback is supported or not
+                    'supports_defaults': True/False,           # Boolean value to identify if fetching running config with default is supported
+                    'supports_commit_comment': True/False,     # Boolean value to identify if adding comment to commit is supported of not
+                    'supports_diff: True/False,                # Boolean value to identify if on box diff capability is supported or not
+                    'supports_sessions: True/False,            # Boolean value to identify if sessions is supported or not
+                }
+            }
+
         """
         pass
 
