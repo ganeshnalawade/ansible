@@ -286,9 +286,10 @@ class Connection(ConnectionBase):
         '''
         Connects to the remote device and starts the terminal
         '''
+        display.display("-- _connect -> before", log_only=True)
         if self.connected:
             return
-
+        display.display("-- _connect -> after", log_only=True)
         self.paramiko_conn = connection_loader.get('paramiko', self._play_context, '/dev/null')
         self.paramiko_conn._set_log_channel(self._get_log_channel())
         self.paramiko_conn.set_options(direct={'look_for_keys': not bool(self._play_context.password and not self._play_context.private_key_file)})
@@ -324,11 +325,14 @@ class Connection(ConnectionBase):
 
         display.vvvv('firing event: on_open_shell()', host=self._play_context.remote_addr)
         self._terminal.on_open_shell()
+        display.display("-- _connect -> called self._terminal.on_open_shell()", log_only=True)
 
         if self._play_context.become and self._play_context.become_method == 'enable':
             display.vvvv('firing event: on_become', host=self._play_context.remote_addr)
             auth_pass = self._play_context.become_pass
+            display.display("-- _connect -> calling self._terminal.on_become", log_only=True)
             self._terminal.on_become(passwd=auth_pass)
+            display.display("-- _connect -> called self._terminal.on_become", log_only=True)
 
         display.vvvv('ssh connection has completed successfully', host=self._play_context.remote_addr)
         self._connected = True
@@ -350,8 +354,9 @@ class Connection(ConnectionBase):
 
         tmp_path = unfrackpath(C.PERSISTENT_CONTROL_PATH_DIR)
         socket_path = unfrackpath(cp % dict(directory=tmp_path))
-
+        display.display("-- _update_connection_state", log_only=True)
         if os.path.exists(socket_path):
+            display.display("-- _update_connection_state: socket_path: %s --" % socket_path, log_only=True)
             self._connected = True
             self._socket_path = socket_path
 
@@ -396,7 +401,7 @@ class Connection(ConnectionBase):
 
         while True:
             data = self._ssh_shell.recv(256)
-
+            display.display("-- receive -> data: %s --" % data, log_only=True)
             # when a channel stream is closed, received data will be empty
             if not data:
                 break
@@ -420,6 +425,7 @@ class Connection(ConnectionBase):
 
             if self._find_prompt(window):
                 self._last_response = recv.getvalue()
+                display.display("-- receive -> self._last_response: %s --" % self._last_response, log_only=True)
                 resp = self._strip(self._last_response)
                 return self._sanitize(resp, command)
 
@@ -428,11 +434,14 @@ class Connection(ConnectionBase):
         Sends the command to the device in the opened shell
         '''
         try:
+            display.display("-- send: command: %s --" % command, log_only=True)
+            display.display("-- send: sendonly: %s --" % sendonly, log_only=True)
             self._history.append(command)
             self._ssh_shell.sendall(b'%s\r' % command)
             if sendonly:
                 return
             response = self.receive(command, prompt, answer, newline, prompt_retry_check)
+            display.display("-- send: response: %s --" % response, log_only=True)
             return to_text(response, errors='surrogate_or_strict')
         except (socket.timeout, AttributeError):
             display.vvvv(traceback.format_exc(), host=self._play_context.remote_addr)
@@ -456,6 +465,10 @@ class Connection(ConnectionBase):
                 A carriage return is automatically appended to this string.
         :returns: True if a prompt was found in ``resp``.  False otherwise
         '''
+        display.display("-- _handle_prompt -> prompts: %s --" % prompts, log_only=True)
+        display.display("-- _handle_prompt -> answer: %s --" % answer, log_only=True)
+        display.display("-- _handle_prompt -> newline: %s --" % newline, log_only=True)
+        display.display("-- _handle_prompt -> prompt_retry_check: %s --" % prompt_retry_check, log_only=True)
         if not isinstance(prompts, list):
             prompts = [prompts]
         prompts = [re.compile(r, re.I) for r in prompts]
@@ -464,6 +477,7 @@ class Connection(ConnectionBase):
             if match:
                 # if prompt_retry_check is enabled to check if same prompt is
                 # repeated don't send answer again.
+                display.display("-- _handle_prompt -> match: %s --" % match, log_only=True)
                 if not prompt_retry_check:
                     self._ssh_shell.sendall(b'%s' % answer)
                     if newline:
@@ -488,6 +502,7 @@ class Connection(ConnectionBase):
         '''
         errored_response = None
         is_error_message = False
+        display.display("-- _find_prompt -> response: %s --" % response, log_only=True)
         for regex in self._terminal.terminal_stderr_re:
             if regex.search(response):
                 is_error_message = True
@@ -500,6 +515,9 @@ class Connection(ConnectionBase):
                         errored_response = response
                         self._matched_pattern = regex.pattern
                         self._matched_prompt = match.group()
+                        display.display("-- _find_prompt -> errored_response: %s --" % errored_response, log_only=True)
+                        display.display("-- _find_prompt -> errored_response -> self._matched_pattern: %s --" % self._matched_pattern, log_only=True)
+                        display.display("-- _find_prompt -> errored_response -> self._matched_prompt: %s --" % self._matched_prompt, log_only=True)
                         break
 
         if not is_error_message:
@@ -508,6 +526,8 @@ class Connection(ConnectionBase):
                 if match:
                     self._matched_pattern = regex.pattern
                     self._matched_prompt = match.group()
+                    display.display("-- _find_prompt -> self._matched_pattern: %s --" % self._matched_pattern, log_only=True)
+                    display.display("-- _find_prompt -> self._matched_prompt: %s --" % self._matched_prompt, log_only=True)
                     if not errored_response:
                         return True
 
