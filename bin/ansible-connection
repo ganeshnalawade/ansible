@@ -11,6 +11,7 @@ try:
 except Exception:
     pass
 
+import datetime
 import fcntl
 import os
 import signal
@@ -75,7 +76,7 @@ class ConnectionProcess(object):
             result = {}
 
             messages.append('control socket path is %s' % self.socket_path)
-
+            display.display('control socket path is %s' % self.socket_path, log_only=True)
             # If this is a relative path (~ gets expanded later) then plug the
             # key's path on to the directory we originally came from, so we can
             # find it now that our cwd is /
@@ -83,8 +84,19 @@ class ConnectionProcess(object):
                 self.play_context.private_key_file = os.path.join(self.original_path, self.play_context.private_key_file)
             self.connection = connection_loader.get(self.play_context.connection, self.play_context, '/dev/null',
                                                     ansible_playbook_pid=self._ansible_playbook_pid)
+
+            display.display("using connection plugin %s" % self.play_context.connection, log_only=True)
             self.connection.set_options()
+
+            self._start_time = datetime.datetime.now()
+            display.display('current working directory is %s' % os.getcwd(), log_only=True)
             self.connection._connect()
+
+            if not self.connection._connected:
+                display.display('unable to connect to remote host %s' % self.play_context.remote_addr, log_only=True)
+
+            connection_time = datetime.datetime.now() - self._start_time
+            display.display('connection established to %s in %s' % (self.play_context.remote_addr, connection_time), log_only=True)
             self.connection._socket_path = self.socket_path
             self.srv.register(self.connection)
             messages.extend(sys.stdout.getvalue().splitlines())
@@ -99,29 +111,39 @@ class ConnectionProcess(object):
             result['exception'] = traceback.format_exc()
         finally:
             result['messages'] = messages
+            display.display("ansible-connection start -> messages:  %s" % messages, log_only=True)
             self.fd.write(json.dumps(result))
             self.fd.close()
 
     def run(self):
         try:
+            display.display("-- ansible-connection run -> self.connection.connected:  %s --" % self.connection.connected, log_only=True)
+            display.display('-- run: C.PERSISTENT_CONNECT_TIMEOUT: %s --' % C.PERSISTENT_CONNECT_TIMEOUT, log_only=True)
             while self.connection.connected:
+
+                display.display('accept incoming request on persistent socket', log_only=True)
                 signal.signal(signal.SIGALRM, self.connect_timeout)
                 signal.signal(signal.SIGTERM, self.handler)
                 signal.alarm(C.PERSISTENT_CONNECT_TIMEOUT)
-
                 self.exception = None
                 (s, addr) = self.sock.accept()
                 signal.alarm(0)
+                display.display('-- ansible-connection run -> %s --' % s, log_only=True)
+                display.display('-- ansible-connection addr -> %s --' % addr, log_only=True)
+                display.display('incoming request accepted on persistent socket', log_only=True)
 
                 signal.signal(signal.SIGALRM, self.command_timeout)
                 while True:
                     data = recv_data(s)
+                    display.display('-- run -> data: %s --' % data, log_only=True)
                     if not data:
                         break
 
+                    display.display('-- run -> self.connection._play_context.timeout: %s --' % self.connection._play_context.timeout, log_only=True)
                     signal.alarm(self.connection._play_context.timeout)
                     resp = self.srv.handle_request(data)
                     signal.alarm(0)
+                    display.display('-- run -> resp: %s --' % resp, log_only=True)
 
                     send_data(s, to_bytes(resp))
 
@@ -138,6 +160,10 @@ class ConnectionProcess(object):
         finally:
             # when done, close the connection properly and cleanup
             # the socket file so it can be recreated
+            display.display('-- ansible-connection self.exception -> %s --' % self.exception, log_only=True)
+            end_time = datetime.datetime.now()
+            delta = end_time - self._start_time
+            display.display('shutdown local socket, connection was active for %s secs' % delta, log_only=True)
             self.shutdown()
 
     def connect_timeout(self, signum, frame):
@@ -243,6 +269,7 @@ def main():
                         process = ConnectionProcess(wfd, play_context, socket_path, original_path, ansible_playbook_pid)
                         process.start()
                     except Exception:
+                        display.display('-- main -> traceback.format_exc(): %s --' % traceback.format_exc(), log_only=True)
                         messages.append(traceback.format_exc())
                         rc = 1
 
