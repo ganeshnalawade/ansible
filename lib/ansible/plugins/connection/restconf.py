@@ -236,12 +236,12 @@ class Connection(NetworkConnectionBase):
         except URLError as exc:
             raise AnsibleConnectionFailure('Could not connect to {0}: {1}'.format(self._url + path, exc.reason))
 
-
         response = response.read()
-        try:
-            response = json.loads(to_text(response))
-        except ValueError:
-            raise ConnectionError('Response was not valid JSON, got {0}'.format(to_text(response)))
+        if response:
+            try:
+                response = json.loads(to_text(response))
+            except ValueError:
+                raise ConnectionError('Response was not valid JSON, got {0}'.format(to_text(response)))
 
         return response
 
@@ -250,13 +250,9 @@ class Connection(NetworkConnectionBase):
             data = json.dumps(data)
 
         path = self._root + path
-        output = message_kwargs.pop('output', None)
-        if output == 'xml':
-            self.accept = 'application/yang.data+xml'
 
         headers = {'Content-Type': self._content_type,
                    'Accept': self._accept}
-
         response = self.send(path, data, headers=headers, method=method)
 
         return self.handle_response(response)
@@ -281,7 +277,20 @@ class Connection(NetworkConnectionBase):
             path += '?' + 'content=%s' % content
         if fields:
             path += '?' + 'field=%s' % fields
-        return self.send_request(path, None, 'GET', output=output)
+
+        if output == 'xml':
+            self._accept = 'application/yang.data+xml'
+
+        return self.send_request(path, None, 'GET')
+
+    def edit_config(self, path=None, content=None, method='PUT', format='json'):
+        if path is None:
+            raise ValueError('path value must be provided')
+
+        if format == 'xml':
+            self._content_type = 'application/yang.data+xml'
+
+        return self.send_request(path, content, method)
 
     def handle_httperror(self, exc):
         try:
