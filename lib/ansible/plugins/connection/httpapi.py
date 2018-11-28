@@ -34,11 +34,18 @@ options:
       - name: ANSIBLE_REMOTE_PORT
     vars:
       - name: ansible_httpapi_port
+  http_api:
+    version_added: 2.8
+    description:
+      - Specifies the API implementation to use to interact with the remote
+        device. Will attempt to load the httpapi plugin of the same name.
+    vars:
+      - name: http_api_type
   network_os:
     description:
       - Configures the device platform network operating system.  This value is
-        used to load the correct httpapi and cliconf plugins to communicate
-        with the remote device
+        used to load the correct terminal and cliconf plugins to communicate
+        with the remote device.
     vars:
       - name: ansible_network_os
   remote_user:
