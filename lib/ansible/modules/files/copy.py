@@ -774,7 +774,7 @@ def main():
     if not module.check_mode:
         file_args = module.load_file_common_arguments(module.params)
         res_args['changed'] = module.set_fs_attributes_if_different(file_args, res_args['changed'])
-
+    res_args['test'] = 'fix'
     module.exit_json(**res_args)
 
 
